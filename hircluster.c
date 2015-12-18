@@ -1825,7 +1825,11 @@ static int slot_get_by_command(redisClusterContext *cc, char *cmd, int len)
 
     if(key_count <= 0)
     {
-        __redisClusterSetError(cc, REDIS_ERR_OTHER, "no keys in command(must have keys for redis cluster mode)");
+        if (command->noforward) {
+            slot_num = 1;
+        } else {
+            __redisClusterSetError(cc, REDIS_ERR_OTHER, "no keys in command(must have keys for redis cluster mode)");
+        }
         goto done;
     }
     else if(key_count == 1)
@@ -1850,7 +1854,7 @@ done:
         command->cmd = NULL;
         command_destroy(command);
     }
-    
+    printf("%d", slot_num);
     return slot_num;
 }
 
@@ -2696,7 +2700,12 @@ static int command_format_by_slot(redisClusterContext *cc,
 
     if(key_count <= 0)
     {
-        __redisClusterSetError(cc, REDIS_ERR_OTHER, "no keys in command(must have keys for redis cluster mode)");
+        if (command->noforward) {
+            slot_num = 1;
+            command->slot_num = 1;
+        } else {
+            __redisClusterSetError(cc, REDIS_ERR_OTHER, "no keys in command(must have keys for redis cluster mode)");
+        }
         goto done;
     }
     else if(key_count == 1)
@@ -2711,7 +2720,7 @@ static int command_format_by_slot(redisClusterContext *cc,
     slot_num = command_pre_fragment(cc, command, commands);
 
 done:
-    
+    printf("%d", slot_num);
     return slot_num;
 }
 
@@ -2729,6 +2738,18 @@ void redisClusterSetMaxRedirect(redisClusterContext *cc, int max_redirect_count)
 void *redisClusterCommand(redisClusterContext *cc, const char *format, ...) {
     
     va_list ap;
+
+    va_start(ap,format);
+
+    void *result = redisClustervCommand(cc,format,ap);
+
+    va_end(ap);
+
+    return result;
+}
+
+void *redisClustervCommand(redisClusterContext *cc, const char *format, va_list ap) {
+
     redisReply *reply = NULL;
     char *cmd = NULL;
     int slot_num;
@@ -2737,8 +2758,6 @@ void *redisClusterCommand(redisClusterContext *cc, const char *format, ...) {
     list *commands = NULL;
     listNode *list_node;
     listIter *list_iter = NULL;
-    
-    va_start(ap,format);
 
     if(cc == NULL)
     {
@@ -2753,23 +2772,21 @@ void *redisClusterCommand(redisClusterContext *cc, const char *format, ...) {
 
     len = redisvFormatCommand(&cmd,format,ap);
 
-    va_end(ap);
-
     if (len == -1) {
         __redisClusterSetError(cc,REDIS_ERR_OOM,"Out of memory");
         return NULL;
     } else if (len == -2) {
         __redisClusterSetError(cc,REDIS_ERR_OTHER,"Invalid format string");
         return NULL;
-    }   
-    
+    }
+
     command = command_get();
     if(command == NULL)
     {
         __redisClusterSetError(cc,REDIS_ERR_OOM,"Out of memory");
         return NULL;
     }
-    
+
     command->cmd = cmd;
     command->clen = len;
 
@@ -2807,7 +2824,7 @@ void *redisClusterCommand(redisClusterContext *cc, const char *format, ...) {
     while((list_node = listNext(list_iter)) != NULL)
     {
         sub_command = list_node->value;
-        
+
         reply = redis_cluster_command_execute(cc, sub_command);
         if(reply == NULL)
         {
@@ -2822,7 +2839,7 @@ void *redisClusterCommand(redisClusterContext *cc, const char *format, ...) {
     }
 
     reply = command_post_fragment(cc, command, commands);
-    
+
 done:
 
     command_destroy(command);
@@ -2838,7 +2855,7 @@ done:
     }
 
     cc->retry_count = 0;
-    
+
     return reply;
 
 error:
@@ -2863,7 +2880,7 @@ error:
     }
 
     cc->retry_count = 0;
-    
+
     return NULL;
 }
 
@@ -2871,6 +2888,19 @@ int redisClusterAppendCommand(redisClusterContext *cc,
     const char *format, ...) {
 
     va_list ap;
+    
+    va_start(ap,format);
+
+    int rc = redisClustervAppendCommand(cc,format,ap);
+
+    va_end(ap);
+
+    return rc;
+}
+
+int redisClustervAppendCommand(redisClusterContext *cc,
+    const char *format, va_list ap) {
+
     int len;
     int slot_num;
     struct cmd *command = NULL, *sub_command;
@@ -2896,25 +2926,23 @@ int redisClusterAppendCommand(redisClusterContext *cc,
 
         cc->requests->free = listCommandFree;
     }
-    
-    va_start(ap,format);
 
-    len = redisvFormatCommand(&cmd,format,ap);  
+    len = redisvFormatCommand(&cmd,format,ap);
     if (len == -1) {
         __redisClusterSetError(cc,REDIS_ERR_OOM,"Out of memory");
         goto error;
     } else if (len == -2) {
         __redisClusterSetError(cc,REDIS_ERR_OTHER,"Invalid format string");
         goto error;
-    }   
-    
+    }
+
     command = command_get();
     if(command == NULL)
     {
         __redisClusterSetError(cc,REDIS_ERR_OOM,"Out of memory");
         goto error;
     }
-    
+
     command->cmd = cmd;
     command->clen = len;
 
@@ -2958,7 +2986,7 @@ int redisClusterAppendCommand(redisClusterContext *cc,
     while((list_node = listNext(list_iter)) != NULL)
     {
         sub_command = list_node->value;
-        
+
         if(__redisClusterAppendCommand(cc, sub_command) == REDIS_OK)
         {
             continue;
@@ -2970,8 +2998,6 @@ int redisClusterAppendCommand(redisClusterContext *cc,
     }
 
 done:
-
-    va_end(ap);
 
     if(command->cmd != NULL)
     {
@@ -3001,12 +3027,10 @@ done:
     }
 
     listAddNodeTail(cc->requests, command);
-    
+
     return REDIS_OK;
 
 error:
-
-    va_end(ap);
 
     if(command != NULL)
     {
@@ -3027,10 +3051,10 @@ error:
         listReleaseIterator(list_iter);
     }
 
-    /* Attention: mybe here we must pop the 
-      sub_commands that had append to the nodes.  
+    /* Attention: mybe here we must pop the
+      sub_commands that had append to the nodes.
       But now we do not handle it. */
-    
+
     return REDIS_ERR;
 }
 

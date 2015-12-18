@@ -89,10 +89,12 @@ void redisClusterFree(redisClusterContext *cc);
 void redisClusterSetMaxRedirect(redisClusterContext *cc, int max_redirect_count);
 
 void *redisClusterCommand(redisClusterContext *cc, const char *format, ...);
+void *redisClustervCommand(redisClusterContext *cc, const char *format, va_list ap);
 
 redisContext *ctx_get_by_node(struct cluster_node *node, const struct timeval *timeout, int flags);
 
 int redisClusterAppendCommand(redisClusterContext *cc, const char *format, ...);
+int redisClustervAppendCommand(redisClusterContext *cc, const char *format, va_list ap);
 int redisClusterAppendCommandArgv(redisClusterContext *cc, int argc, const char **argv);
 int redisClusterGetReply(redisClusterContext *cc, void **reply);
 void redisCLusterReset(redisClusterContext *cc);

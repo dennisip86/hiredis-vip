@@ -18,6 +18,7 @@ redis_argz(struct cmd *r)
 {
     switch (r->type) {
     case CMD_REQ_REDIS_PING:
+    case CMD_REQ_REDIS_TIME:
     case CMD_REQ_REDIS_QUIT:
         return 1;
 
@@ -607,6 +608,12 @@ redis_parse_cmd(struct cmd *r)
                 if (str4icmp(m, 'q', 'u', 'i', 't')) {
                     r->type = CMD_REQ_REDIS_QUIT;
                     r->quit = 1;
+                    break;
+                }
+
+                if (str4icmp(m, 't', 'i', 'm', 'e')) {
+                    r->type = CMD_REQ_REDIS_TIME;
+                    r->noforward = 1;
                     break;
                 }
 
