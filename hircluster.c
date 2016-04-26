@@ -1854,7 +1854,6 @@ done:
         command->cmd = NULL;
         command_destroy(command);
     }
-    printf("%d", slot_num);
     return slot_num;
 }
 
@@ -2720,7 +2719,6 @@ static int command_format_by_slot(redisClusterContext *cc,
     slot_num = command_pre_fragment(cc, command, commands);
 
 done:
-    printf("%d", slot_num);
     return slot_num;
 }
 
